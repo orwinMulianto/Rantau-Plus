@@ -1,0 +1,6 @@
+backend/.env
+ai-service/.env
+ai-service/node_modules/
+backend/rantau-plus.exe
+.env
+*.log

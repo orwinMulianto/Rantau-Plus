@@ -1,0 +1,26 @@
+[
+  {
+    "id": "finance.available-funds",
+    "title": "Dana tersedia",
+    "keywords": "dana uang saldo cadangan kewajiban tagihan pemasukan pengeluaran available funds",
+    "text": "Dana tersedia adalah saldo awal periode ditambah pemasukan yang diterima, lalu dikurangi pengeluaran, kewajiban belum dibayar yang jatuh tempo sebelum pemasukan berikutnya, dan dana cadangan. Nilai negatif menunjukkan defisit."
+  },
+  {
+    "id": "finance.safe-to-spend",
+    "title": "Safe-to-Spend",
+    "keywords": "safe to spend batas harian belanja pengeluaran aman sisa hari",
+    "text": "Safe-to-Spend adalah estimasi pengeluaran per hari hingga pemasukan berikutnya. Rantau+ membagi dana tersedia dengan sisa hari dan menampilkan nol ketika dana tersedia nol atau defisit."
+  },
+  {
+    "id": "finance.runway",
+    "title": "Financial Runway",
+    "keywords": "runway runway days bertahan ketahanan cukup berapa lama rata rata",
+    "text": "Financial Runway memperkirakan berapa lama dana tersedia akan bertahan jika pola pengeluaran berlanjut. Rantau+ membagi dana tersedia dengan rata-rata pengeluaran harian. Runway belum tersedia ketika belum ada pengeluaran."
+  },
+  {
+    "id": "finance.risk",
+    "title": "Status risiko keuangan",
+    "keywords": "risiko resiko status aman waspada berisiko coverage cakupan",
+    "text": "Rantau+ membandingkan runway dengan sisa hari hingga pemasukan. Cakupan 1 atau lebih berstatus Aman. Cakupan dari 0,8 hingga kurang dari 1 berstatus Waspada. Cakupan di bawah 0,8 atau dana tersedia nol maupun defisit berstatus Berisiko. Jika dana tersedia positif dan pengeluaran belum tercatat, statusnya Belum Cukup Data."
+  }
+]

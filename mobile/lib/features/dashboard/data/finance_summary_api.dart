@@ -16,13 +16,13 @@ class FinanceSummaryApi {
         .get(endpoint, headers: {'Accept': 'application/json'})
         .timeout(const Duration(seconds: 8));
 
-    if (response.statusCode == 204) return null;
+    if (response.statusCode == 204 || response.statusCode == 404) return null;
     if (response.statusCode != 200) {
       throw http.ClientException('Ringkasan demo gagal dimuat.', endpoint);
     }
 
-    final payload = jsonDecode(utf8.decode(response.bodyBytes))
-        as Map<String, dynamic>;
+    final payload =
+        jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
     final data = payload['data'] as Map<String, dynamic>?;
     return data == null ? null : FinanceSummary.fromJson(data);
   }

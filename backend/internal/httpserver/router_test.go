@@ -8,6 +8,8 @@ import (
 	"testing"
 
 	"rantauplus/backend/internal/modules/assistant"
+	"rantauplus/backend/internal/modules/auth"
+	"rantauplus/backend/internal/modules/finance"
 )
 
 type demoChatClient struct{}
@@ -19,14 +21,31 @@ func (demoChatClient) Chat(_ context.Context, input assistant.Request) (assistan
 	return assistant.Answer{Skill: input.Skill, Mode: "retrieval", Answer: input.Message}, nil
 }
 
+func TestFinancialSetupRequiresSession(t *testing.T) {
+	router := New(false, nil, nil, &auth.Service{}, &finance.SetupService{})
+	for _, route := range []struct{ method, path string }{
+		{http.MethodGet, "/setup"},
+		{http.MethodPost, "/setup/preview"},
+		{http.MethodPut, "/setup"},
+		{http.MethodGet, "/summary"},
+	} {
+		req := httptest.NewRequest(route.method, "/api/v1/finance"+route.path, nil)
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+		if rec.Code != http.StatusUnauthorized || rec.Header().Get("Cache-Control") != "no-store" {
+			t.Errorf("%s %s: status %d, cache %q", route.method, route.path, rec.Code, rec.Header().Get("Cache-Control"))
+		}
+	}
+}
+
 func TestDemoRoutes(t *testing.T) {
 	const financePath = "/api/v1/demo/finance/summary"
 	const assistantPath = "/api/v1/demo/assistant/chat"
 
 	service := assistant.NewService(demoChatClient{})
-	disabled := New(false, service, nil)
-	financeOnly := New(true, nil, nil)
-	fullDemo := New(true, service, nil)
+	disabled := New(false, service, nil, nil, nil)
+	financeOnly := New(true, nil, nil, nil, nil)
+	fullDemo := New(true, service, nil, nil, nil)
 
 	cases := []struct {
 		name    string

@@ -2,119 +2,99 @@ package database
 
 import (
 	"context"
-	"embed"
+	"database/sql"
 	"errors"
 	"fmt"
-	"io/fs"
-	"path"
+	"time"
 
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
+	"gorm.io/gorm"
 )
-
-//go:embed migrations/*.up.sql
-var scripts embed.FS
 
 const (
-	initialVersion = "000001_initial_schema.up.sql"
-	lockID         = int64(0x52414e544155)
+	// These IDs match the names already stored by the previous runner.
+	initialVersion   = "000001_initial_schema.up.sql"
+	integrityVersion = "000002_transaction_integrity.up.sql"
+	authVersion      = "000003_authentication.up.sql"
+	setupVersion     = "000004_financial_setup"
+	lockID           = int64(0x52414e544155)
 )
 
-// Apply runs pending migrations atomically. Only one process can change the schema at a time.
-func Apply(ctx context.Context, pool *pgxpool.Pool, adoptInitial bool) ([]string, error) {
-	versions, err := migrationVersions()
-	if err != nil {
-		return nil, err
-	}
+type schemaMigration struct {
+	Version   string    `gorm:"type:text;primaryKey"`
+	AppliedAt time.Time `gorm:"type:timestamptz;not null;default:now()"`
+}
 
+func (schemaMigration) TableName() string { return "schema_migrations" }
+
+var migrations = []struct {
+	version string
+	apply   func(*gorm.DB) error
+}{
+	{initialVersion, migrateInitial},
+	{integrityVersion, migrateTransactionIntegrity},
+	{authVersion, migrateAuthentication},
+	{setupVersion, migrateFinancialSetup},
+}
+
+// Apply runs pending migrations atomically and serializes schema changes in PostgreSQL.
+func Apply(ctx context.Context, db *gorm.DB, adoptInitial bool) ([]string, error) {
 	var applied []string
-	err = pgx.BeginTxFunc(ctx, pool, pgx.TxOptions{IsoLevel: pgx.ReadCommitted}, func(tx pgx.Tx) error {
-		if _, err := tx.Exec(ctx, "SELECT pg_advisory_xact_lock($1)", lockID); err != nil {
+	err := db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Exec("SELECT pg_advisory_xact_lock(?)", lockID).Error; err != nil {
 			return fmt.Errorf("mengunci migrasi: %w", err)
 		}
-		if _, err := tx.Exec(ctx, `CREATE TABLE IF NOT EXISTS schema_migrations (
-			version TEXT PRIMARY KEY,
-			applied_at TIMESTAMPTZ NOT NULL DEFAULT now()
-		)`); err != nil {
+		if err := tx.AutoMigrate(&schemaMigration{}); err != nil {
 			return fmt.Errorf("menyiapkan riwayat migrasi: %w", err)
 		}
 		if adoptInitial {
-			if err := recordExistingInitial(ctx, tx); err != nil {
+			if err := recordExistingInitial(tx); err != nil {
 				return err
 			}
 		}
-		for _, version := range versions {
-			var exists bool
-			if err := tx.QueryRow(ctx,
-				"SELECT EXISTS (SELECT 1 FROM schema_migrations WHERE version = $1)", version,
-			).Scan(&exists); err != nil {
+		for _, migration := range migrations {
+			var count int64
+			if err := tx.Model(&schemaMigration{}).Where("version = ?", migration.version).Count(&count).Error; err != nil {
 				return err
 			}
-			if exists {
+			if count != 0 {
 				continue
 			}
-			sql, err := scripts.ReadFile("migrations/" + version)
-			if err != nil {
+			if err := migration.apply(tx); err != nil {
+				return fmt.Errorf("migrasi %s: %w", migration.version, err)
+			}
+			if err := tx.Create(&schemaMigration{Version: migration.version}).Error; err != nil {
 				return err
 			}
-			if _, err := tx.Exec(ctx, string(sql)); err != nil {
-				return fmt.Errorf("migrasi %s: %w", version, err)
-			}
-			if _, err := tx.Exec(ctx, "INSERT INTO schema_migrations (version) VALUES ($1)", version); err != nil {
-				return err
-			}
-			applied = append(applied, version)
+			applied = append(applied, migration.version)
 		}
 		return nil
-	})
+	}, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
 	if err != nil {
 		return nil, err
 	}
 	return applied, nil
 }
 
-func recordExistingInitial(ctx context.Context, tx pgx.Tx) error {
-	initialTables := []string{
-		"users", "financial_periods", "categories", "transactions", "obligations", "reminders", "refresh_tokens",
+func recordExistingInitial(tx *gorm.DB) error {
+	for _, table := range []string{"users", "financial_periods", "categories", "transactions", "obligations", "reminders", "refresh_tokens"} {
+		if !tx.Migrator().HasTable(table) {
+			return errors.New("skema awal tidak lengkap; jalankan migrasi biasa pada database baru")
+		}
 	}
-	var count int
-	if err := tx.QueryRow(ctx, `SELECT count(*)
-		FROM unnest($1::text[]) AS initial(table_name)
-		WHERE to_regclass(table_name) IS NOT NULL`, initialTables).Scan(&count); err != nil {
-		return err
-	}
-	if count != len(initialTables) {
-		return errors.New("skema awal tidak lengkap; jalankan migrasi biasa pada database baru")
-	}
-	_, err := tx.Exec(ctx,
-		"INSERT INTO schema_migrations (version) VALUES ($1) ON CONFLICT DO NOTHING", initialVersion)
-	return err
+	return tx.Exec("INSERT INTO schema_migrations (version) VALUES (?) ON CONFLICT DO NOTHING", initialVersion).Error
 }
 
-func CheckReady(ctx context.Context, pool *pgxpool.Pool) error {
-	versions, err := migrationVersions()
-	if err != nil {
+func CheckReady(ctx context.Context, db *gorm.DB) error {
+	versions := make([]string, 0, len(migrations))
+	for _, migration := range migrations {
+		versions = append(versions, migration.version)
+	}
+	var count int64
+	if err := db.WithContext(ctx).Model(&schemaMigration{}).Where("version IN ?", versions).Count(&count).Error; err != nil {
 		return err
 	}
-	var count int
-	if err := pool.QueryRow(ctx, "SELECT count(*) FROM schema_migrations WHERE version = ANY($1::text[])",
-		versions).Scan(&count); err != nil {
-		return err
-	}
-	if count != len(versions) {
+	if count != int64(len(versions)) {
 		return errors.New("migrasi database belum lengkap")
 	}
 	return nil
-}
-
-func migrationVersions() ([]string, error) {
-	paths, err := fs.Glob(scripts, "migrations/*.up.sql")
-	if err != nil {
-		return nil, err
-	}
-	// The migration history stores filenames without their directory.
-	for i, scriptPath := range paths {
-		paths[i] = path.Base(scriptPath)
-	}
-	return paths, nil
 }

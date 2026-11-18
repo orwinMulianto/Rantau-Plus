@@ -1,15 +1,13 @@
-package handler
+package finance
 
 import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-
-	"rantauplus/backend/internal/service"
 )
 
-func DemoFinanceSummary(c *gin.Context) {
-	summary, err := service.DemoFinanceSummary()
+func getDemoSummary(c *gin.Context) {
+	summary, err := demoSummary()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{
 			"code": "SUMMARY_ERROR", "message": "Ringkasan demo gagal diproses.",

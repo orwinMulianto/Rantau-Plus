@@ -1,5 +1,3 @@
-BEGIN;
-
 CREATE TABLE users (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name TEXT NOT NULL,
@@ -97,5 +95,3 @@ CREATE TABLE refresh_tokens (
     revoked_at TIMESTAMPTZ
 );
 CREATE INDEX refresh_tokens_user_idx ON refresh_tokens (user_id);
-
-COMMIT;

@@ -7,7 +7,7 @@ Rantau+ membantu mahasiswa rantau memantau keuangan sampai periode pemasukan ber
 | `mobile/lib/` | Antarmuka pengguna dan konsumsi API Go |
 | `backend/internal/domain/finance/` | Saldo tersedia, Safe-to-Spend, Financial Runway, proyeksi saldo, dan status risiko |
 | `backend/internal/integration/assistant/` | Klien dari API Go ke AI Service |
-| `backend/database/migrations/` | Skema PostgreSQL, riwayat migrasi, dan SQL rollback |
+| `backend/database/` | Koneksi, model GORM, dan migrasi skema PostgreSQL |
 | `ai-service/src/skills/finance/` | Skill penjelasan konsep keuangan Rantau+ |
 | `ai-service/src/rag/` | Pencarian dokumen dan penyusunan jawaban dengan konteks |
 | `ai-service/src/providers/` | Adapter model opsional untuk API Chat Completions |
@@ -20,13 +20,18 @@ Backend mengelompokkan kode per fitur dan memakai pola Controller–Service–Re
 | Lokasi di `backend/` | Tanggung jawab |
 | --- | --- |
 | `cmd/api/` dan `internal/httpserver/` | Merangkai dependensi, menjalankan Gin, dan mendaftarkan route umum seperti `/healthz` dan `/readyz` |
-| `internal/modules/finance/` | Route, controller, dan service demo ringkasan keuangan. Service memanggil financial engine di `internal/domain/finance/`. |
+| `internal/modules/finance/` | Financial Setup, dashboard pribadi, dan ringkasan demo. Perhitungan memakai `internal/domain/finance/`. |
 | `internal/modules/assistant/` | Route, controller, dan service AI Companion. Service memvalidasi pesan dan memanggil klien di `internal/integration/assistant/`. |
-| `database/entities/` | Struct Go per tabel beserta pemetaan kolom PostgreSQL. Nominal disimpan sebagai `int64` dalam rupiah bulat. |
-| `database/postgres/` | Membuka koneksi PostgreSQL dengan `pgx` |
-| `database/migration.go` dan `database/migrations/` | Runner migrasi dan berkas SQL berversi yang diterapkan lewat `cmd/migrate/` |
+| `internal/modules/auth/` | Route, service, repository, dan middleware untuk akun, sesi, dan pemulihan password. |
+| `database/entities/` | Model GORM untuk tabel PostgreSQL. Nominal disimpan sebagai `int64` dalam rupiah bulat. |
+| `database/postgres/` | Membuka koneksi GORM dengan driver PostgreSQL |
+| `database/migration.go` dan `database/schema_steps.go` | Menjalankan `AutoMigrate` dan perubahan khusus PostgreSQL per versi lewat `cmd/migrate/` |
 
-Controller membaca request dan mengirim respons JSON. Service mengatur alur fitur. Repository per fitur ditambahkan saat service mulai membaca atau menulis data pengguna di PostgreSQL.
+Controller membaca request dan mengirim respons JSON. Service mengatur alur fitur. Repository autentikasi menyimpan akun dan sesi di PostgreSQL.
+
+## Autentikasi
+
+Backend menyediakan pendaftaran dengan verifikasi email, login, pengelolaan sesi, ganti password, dan pemulihan akun. Panduan menjalankan SMTP lokal dan kontrak API untuk Flutter ada di [autentikasi-backend.md](docs/autentikasi-backend.md).
 
 ## Jalankan AI Companion lokal
 
@@ -68,13 +73,26 @@ Untuk generasi dengan model, atur `AI_LLM_URL`, `AI_LLM_MODEL`, dan `AI_LLM_API_
 
 ## Dashboard Flutter
 
+Pilih **Financial Setup** di dashboard, lalu masuk atau daftar dengan akun Rantau+. Isi saldo awal, tanggal pemasukan berikutnya, dana cadangan, dan kewajiban utama. Pilih **Lihat pratinjau** untuk memeriksa dana tersedia dan batas harian, lalu **Simpan pengaturan** untuk kembali ke dashboard pribadi. Pengaturan disimpan di PostgreSQL. Sesi masuk Flutter digunakan selama aplikasi berjalan.
+
+Aktifkan autentikasi dengan [panduan SMTP lokal](docs/autentikasi-backend.md) dan terapkan migrasi `000004_financial_setup` lewat `go run ./cmd/migrate`. API pribadi memakai bearer token.
+
+| Endpoint | Kegunaan |
+| --- | --- |
+| `GET /api/v1/finance/setup` | Mengambil tanggal hari ini menurut zona waktu akun dan pengaturan periode aktif |
+| `POST /api/v1/finance/setup/preview` | Menghitung dampak perubahan pengaturan tanpa menulis ke database |
+| `PUT /api/v1/finance/setup` | Menyimpan periode dan daftar kewajiban setup dalam satu transaksi database |
+| `GET /api/v1/finance/summary` | Mengambil ringkasan periode aktif untuk dashboard pribadi |
+
+Jatuh tempo yang dikosongkan mengikuti tanggal pemasukan berikutnya. Perhitungan juga menyisihkan kewajiban tercatat lain yang belum dibayar dan jatuh tempo paling lambat pada tanggal itu.
+
 Endpoint `GET /api/v1/demo/finance/summary` berjalan dengan data sintetis. Contoh ini menghasilkan Rp1.300.000 dana tersedia, Rp65.000 per hari Safe-to-Spend, serta 16,25 hari Financial Runway.
 
 Untuk menyiapkan platform Flutter sekali dari root proyek, jalankan `flutter create --empty --platforms=android,ios --project-name rantau_plus --org id.rantauplus mobile`. Jalankan `flutter pub get` dari `mobile/` setelahnya. Tambahkan elemen `<application android:usesCleartextTraffic="true" />` ke manifest Android debug untuk mengizinkan demo HTTP lokal, lalu jalankan `flutter run` di emulator Android. Alamat backend dapat diatur melalui `--dart-define=API_BASE_URL=...`.
 
 ## Database PostgreSQL dan API Gin
 
-Dari root repo, jalankan PostgreSQL lokal dengan Docker Compose. Setelah database siap, terapkan migrasi dan jalankan API Gin dengan koneksi yang sama.
+Dari root repo, jalankan PostgreSQL lokal dengan Docker Compose. Setelah database siap, gunakan GORM untuk menerapkan migrasi berdasarkan model Go, lalu jalankan API Gin dengan koneksi yang sama.
 
 ```powershell
 docker compose up -d --wait db
@@ -90,6 +108,7 @@ Docker Compose memakai port host `5433` secara default. Jika memakai PostgreSQL 
 | Tabel | Isi |
 | --- | --- |
 | `users`, `refresh_tokens` | Akun, preferensi dasar, dan sesi |
+| `auth_sessions`, `auth_email_jobs`, `auth_rate_limits` | Sesi aktif, antrean email autentikasi, dan batas percobaan |
 | `financial_periods` | Saldo awal, dana cadangan, dan tanggal pemasukan berikutnya |
 | `categories`, `transactions` | Kategori bawaan atau pribadi serta catatan pemasukan dan pengeluaran dalam rupiah bulat |
 | `obligations` | Tagihan, jatuh tempo, dan transaksi pengeluaran yang terkait saat lunas |
@@ -100,7 +119,7 @@ Transaksi hanya dapat merujuk ke kategori bawaan atau kategori milik pengguna ya
 
 Periksa `http://127.0.0.1:8080/healthz` untuk status server dan `http://127.0.0.1:8080/readyz` untuk kesiapan database. Endpoint `/readyz` mengembalikan HTTP 200 saat PostgreSQL terhubung dan seluruh migrasi tersedia. API demo tetap dapat dipakai tanpa PostgreSQL dengan `RANTAU_DEMO=true`.
 
-Perintah migrasi bisa dijalankan ulang. Jika database sebelumnya sudah dibuat dengan menjalankan `000001_initial_schema.up.sql` secara manual, jalankan `go run ./cmd/migrate -adopt-initial` untuk mencatat skema lama dan menerapkan migrasi berikutnya tanpa membuat ulang tabel.
+Perintah migrasi bisa dijalankan ulang dan membaca riwayat `schema_migrations` yang sudah ada. Jika kamu pernah memasang skema awal versi 000001 secara manual, gunakan `go run ./cmd/migrate -adopt-initial` untuk mencatat versi tersebut dan melanjutkan ke versi berikutnya.
 
 ## Pemeriksaan
 

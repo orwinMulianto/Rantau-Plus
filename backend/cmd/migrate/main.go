@@ -13,7 +13,7 @@ import (
 )
 
 func main() {
-	adoptInitial := flag.Bool("adopt-initial", false, "catat skema 000001 yang sebelumnya dipasang manual")
+	adoptInitial := flag.Bool("adopt-initial", false, "catat skema awal 000001 yang sebelumnya dipasang manual")
 	flag.Parse()
 	if err := run(*adoptInitial); err != nil {
 		log.Fatal(err)
@@ -28,13 +28,17 @@ func run(adoptInitial bool) error {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
 
-	pool, err := postgres.Open(ctx, databaseURL)
+	db, err := postgres.Open(ctx, databaseURL)
 	if err != nil {
 		return errors.New("PostgreSQL gagal dihubungi. Periksa DATABASE_URL dan status server")
 	}
+	pool, err := db.DB()
+	if err != nil {
+		return err
+	}
 	defer pool.Close()
 
-	applied, err := database.Apply(ctx, pool, adoptInitial)
+	applied, err := database.Apply(ctx, db, adoptInitial)
 	if err != nil {
 		return err
 	}

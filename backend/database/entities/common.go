@@ -3,8 +3,8 @@ package entities
 import "time"
 
 type Timestamps struct {
-	CreatedAt time.Time `db:"created_at"`
-	UpdatedAt time.Time `db:"updated_at"`
+	CreatedAt time.Time `gorm:"type:timestamptz;not null;default:now()"`
+	UpdatedAt time.Time `gorm:"type:timestamptz;not null;default:now()"`
 }
 
 type TransactionType string

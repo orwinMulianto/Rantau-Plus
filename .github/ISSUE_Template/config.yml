@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Panduan fitur dan alur UI
+    url: https://github.com/orwinMulianto/Rantau-Plus/blob/main/docs/fitur-ui-ux.md
+    about: Baca acuan layar dan prioritas fitur sebelum membuat issue baru.

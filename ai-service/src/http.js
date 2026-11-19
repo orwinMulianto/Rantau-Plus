@@ -12,13 +12,14 @@ function fail(response, status, code, message) {
   send(response, status, { error: { code, message } });
 }
 
-export function createAIService(skills) {
+export function createAIService(skills, companion) {
   return createServer(async (request, response) => {
     if (request.method === 'GET' && request.url === '/healthz') {
       send(response, 200, { data: { status: 'ok' } });
       return;
     }
-    if (request.method !== 'POST' || request.url !== '/internal/v1/chat') {
+    const isCompanion = request.url === '/internal/v1/companion';
+    if (request.method !== 'POST' || (!isCompanion && request.url !== '/internal/v1/chat')) {
       fail(response, 404, 'NOT_FOUND', 'Endpoint tidak ditemukan.');
       return;
     }
@@ -36,7 +37,7 @@ export function createAIService(skills) {
       let bytes = 0;
       for await (const chunk of request.iterator({ destroyOnReturn: false })) {
         bytes += chunk.length;
-        if (bytes > maxBodyBytes) {
+        if (bytes > (isCompanion ? 64 * 1024 : maxBodyBytes)) {
           request.resume();
           fail(response, 413, 'REQUEST_TOO_LARGE', 'Permintaan terlalu besar.');
           return;
@@ -54,7 +55,11 @@ export function createAIService(skills) {
       fail(response, 400, 'INVALID_MESSAGE', 'Isi pesan dengan 1–1000 karakter.');
       return;
     }
-    const runSkill = skills.get(skill);
+    if (isCompanion && !companion) {
+      fail(response, 503, 'COMPANION_DISABLED', 'Model percakapan belum diaktifkan.');
+      return;
+    }
+    const runSkill = isCompanion ? companion : skills.get(skill);
     if (!runSkill) {
       fail(response, 400, 'UNKNOWN_SKILL', 'Skill belum tersedia.');
       return;
@@ -63,8 +68,8 @@ export function createAIService(skills) {
     const controller = new AbortController();
     response.once('close', () => controller.abort());
     try {
-      const result = await runSkill({ message, signal: controller.signal });
-      send(response, 200, { data: { skill, ...result } });
+      const result = await runSkill({ message, history: body.history, hasLocation: body.has_location === true, signal: controller.signal });
+      send(response, 200, { data: isCompanion ? result : { skill, ...result } });
     } catch {
       fail(response, 500, 'SKILL_ERROR', 'Skill gagal memproses pesan.');
     }

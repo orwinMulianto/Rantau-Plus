@@ -24,6 +24,7 @@ func New(demoEnabled bool, assistantService *assistant.Service, checkDatabase fu
 		auth.RegisterRoutes(api, authService)
 		if setupService != nil {
 			finance.RegisterSetupRoutes(api, authService, setupService)
+			assistant.RegisterPersonalRoutes(api, authService, assistantService, setupService)
 		}
 	}
 	if demoEnabled {

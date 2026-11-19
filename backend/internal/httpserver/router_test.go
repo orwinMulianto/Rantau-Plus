@@ -21,15 +21,16 @@ func (demoChatClient) Chat(_ context.Context, input assistant.Request) (assistan
 	return assistant.Answer{Skill: input.Skill, Mode: "retrieval", Answer: input.Message}, nil
 }
 
-func TestFinancialSetupRequiresSession(t *testing.T) {
+func TestPersonalRoutesRequireSession(t *testing.T) {
 	router := New(false, nil, nil, &auth.Service{}, &finance.SetupService{})
 	for _, route := range []struct{ method, path string }{
-		{http.MethodGet, "/setup"},
-		{http.MethodPost, "/setup/preview"},
-		{http.MethodPut, "/setup"},
-		{http.MethodGet, "/summary"},
+		{http.MethodGet, "/finance/setup"},
+		{http.MethodPost, "/finance/setup/preview"},
+		{http.MethodPut, "/finance/setup"},
+		{http.MethodGet, "/finance/summary"},
+		{http.MethodPost, "/assistant/chat"},
 	} {
-		req := httptest.NewRequest(route.method, "/api/v1/finance"+route.path, nil)
+		req := httptest.NewRequest(route.method, "/api/v1"+route.path, nil)
 		rec := httptest.NewRecorder()
 		router.ServeHTTP(rec, req)
 		if rec.Code != http.StatusUnauthorized || rec.Header().Get("Cache-Control") != "no-store" {

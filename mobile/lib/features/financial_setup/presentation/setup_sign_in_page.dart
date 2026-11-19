@@ -108,7 +108,7 @@ class _SetupSignInPageState extends State<SetupSignInPage> {
                   Text(
                     _step == _Step.verify
                         ? 'Masukkan token dari email yang dikirim ke ${_email.text.trim()}.'
-                        : 'Gunakan akun Rantau+ untuk menyimpan pengaturan keuangan.',
+                        : 'Gunakan akun Rantau+ untuk melanjutkan.',
                     style: theme.textTheme.bodyLarge,
                   ),
                   const SizedBox(height: 20),

@@ -17,7 +17,13 @@ type ChatClient interface {
 }
 
 type Service struct {
-	client ChatClient
+	client  ChatClient
+	places  FoodFinder
+	history conversations
+}
+
+func NewCompanion(client ChatClient, places FoodFinder) *Service {
+	return &Service{client: client, places: places}
 }
 
 func NewService(client ChatClient) *Service {
@@ -25,9 +31,18 @@ func NewService(client ChatClient) *Service {
 }
 
 func (s *Service) chat(ctx context.Context, input Request) (Answer, error) {
-	input.Message = strings.TrimSpace(input.Message)
-	if input.Message == "" || utf8.RuneCountInString(input.Message) > 1000 {
-		return Answer{}, errInvalidMessage
+	message, err := validateMessage(input.Message)
+	if err != nil {
+		return Answer{}, err
 	}
+	input.Message = message
 	return s.client.Chat(ctx, input)
+}
+
+func validateMessage(message string) (string, error) {
+	message = strings.TrimSpace(message)
+	if message == "" || utf8.RuneCountInString(message) > 1000 {
+		return "", errInvalidMessage
+	}
+	return message, nil
 }

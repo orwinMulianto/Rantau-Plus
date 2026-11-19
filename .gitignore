@@ -4,3 +4,5 @@ ai-service/node_modules/
 backend/rantau-plus.exe
 .env
 *.log
+
+mobile/.dart_tool/

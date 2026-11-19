@@ -174,6 +174,10 @@ func prepareSetup(db *gorm.DB, userID, today string, input setupInput) (*entitie
 	return period, draft, summary, err
 }
 
+func (s *SetupService) SummaryForAccount(ctx context.Context, accountID, timezone string) (*domain.Summary, error) {
+	return s.summary(ctx, accountID, userToday(time.Now(), timezone))
+}
+
 func (s *SetupService) summary(ctx context.Context, userID, today string) (*domain.Summary, error) {
 	db := s.db.WithContext(ctx)
 	period, err := activePeriod(db, userID, today)

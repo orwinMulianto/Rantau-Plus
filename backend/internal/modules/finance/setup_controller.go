@@ -20,7 +20,7 @@ func (s *SetupService) getSetup(c *gin.Context) {
 
 func (s *SetupService) getSummary(c *gin.Context) {
 	identity, _ := auth.SessionIdentity(c)
-	result, err := s.summary(c.Request.Context(), identity.Account.ID, userToday(time.Now(), identity.Account.Timezone))
+	result, err := s.SummaryForAccount(c.Request.Context(), identity.Account.ID, identity.Account.Timezone)
 	if err == nil && result == nil {
 		c.Status(http.StatusNoContent)
 		return

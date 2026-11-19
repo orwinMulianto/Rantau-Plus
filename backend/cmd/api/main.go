@@ -15,6 +15,7 @@ import (
 	"rantauplus/backend/internal/httpserver"
 	assistantclient "rantauplus/backend/internal/integration/assistant"
 	"rantauplus/backend/internal/integration/authmail"
+	"rantauplus/backend/internal/integration/places"
 	"rantauplus/backend/internal/modules/assistant"
 	"rantauplus/backend/internal/modules/auth"
 	"rantauplus/backend/internal/modules/finance"
@@ -75,12 +76,12 @@ func run() error {
 
 	gin.SetMode(gin.ReleaseMode)
 	var assistantService *assistant.Service
-	if cfg.DemoEnabled && cfg.AIServiceURL != "" {
+	if cfg.AIServiceURL != "" {
 		client, err := assistantclient.NewClient(cfg.AIServiceURL)
 		if err != nil {
 			return err
 		}
-		assistantService = assistant.NewService(client)
+		assistantService = assistant.NewCompanion(client, places.New(cfg.PlacesAPIKey))
 	}
 	routes := httpserver.New(cfg.DemoEnabled, assistantService, checkDatabase, authService, setupService)
 	if cfg.Auth != nil {
@@ -91,7 +92,7 @@ func run() error {
 	server := &http.Server{
 		Addr: cfg.Address, Handler: routes,
 		ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second,
-		WriteTimeout: 10 * time.Second, IdleTimeout: time.Minute,
+		WriteTimeout: 140 * time.Second, IdleTimeout: time.Minute,
 	}
 	log.Printf("Rantau+ API mendengarkan alamat %s (demo=%t)", cfg.Address, cfg.DemoEnabled)
 	return server.ListenAndServe()

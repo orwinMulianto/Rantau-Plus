@@ -10,10 +10,12 @@ class DashboardPage extends StatefulWidget {
     required this.loadSummary,
     required this.openSetup,
     required this.isDemo,
+    required this.openCompanion,
   });
 
   final Future<FinanceSummary?> Function() loadSummary;
   final Future<void> Function(BuildContext) openSetup;
+  final Future<bool?> Function(BuildContext) openCompanion;
   final bool Function() isDemo;
 
   @override
@@ -55,6 +57,20 @@ class _DashboardPageState extends State<DashboardPage> {
             icon: const Icon(Icons.refresh),
           ),
         ],
+      ),
+      floatingActionButton: FloatingActionButton(
+        tooltip: 'Buka AI Companion',
+        onPressed: () async {
+          final wasDemo = widget.isDemo();
+          final needsSetup = await widget.openCompanion(context);
+          if (!mounted) return;
+          if (needsSetup == true) {
+            await _openSetup();
+          } else if (wasDemo != widget.isDemo()) {
+            await _reload();
+          }
+        },
+        child: const Icon(Icons.smart_toy_outlined),
       ),
       body: SafeArea(
         child: Center(
@@ -152,7 +168,7 @@ class _SummaryContent extends StatelessWidget {
     };
 
     return ListView(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 88),
       children: [
         Text('Ringkasan keuangan', style: theme.textTheme.headlineMedium),
         const SizedBox(height: 6),

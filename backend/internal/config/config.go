@@ -13,6 +13,7 @@ type Config struct {
 	Address      string
 	DatabaseURL  string
 	AIServiceURL string
+	PlacesAPIKey string
 	DemoEnabled  bool
 	Auth         *AuthConfig
 }
@@ -35,6 +36,7 @@ func Load() (Config, error) {
 		Address:      os.Getenv("APP_ADDR"),
 		DatabaseURL:  os.Getenv("DATABASE_URL"),
 		AIServiceURL: os.Getenv("AI_SERVICE_URL"),
+		PlacesAPIKey: os.Getenv("GOOGLE_PLACES_API_KEY"),
 	}
 	if cfg.Address == "" {
 		cfg.Address = "127.0.0.1:8080"

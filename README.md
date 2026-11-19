@@ -35,17 +35,28 @@ Backend menyediakan pendaftaran dengan verifikasi email, login, pengelolaan sesi
 
 ## Jalankan AI Companion lokal
 
-Dari root workspace, jalankan AI Service di terminal pertama. Node.js 22 atau lebih baru cukup untuk demo lokal.
+Dari root workspace, jalankan AI Service di terminal pertama dengan Node.js 22 atau lebih baru. `npm start` membaca `ai-service/.env`. Variabel lingkungan proses memiliki prioritas.
 
 ```powershell
 Set-Location ai-service
+if (!(Test-Path .env)) { Copy-Item .env.example .env }
+ollama list
 npm start
 ```
 
-Jalankan API di terminal kedua dengan Go 1.25 atau lebih baru.
+Template memakai Ollama lokal dan `qwen3.5:9b`. Pasang model lewat `ollama pull qwen3.5:9b` atau isi `AI_LLM_MODEL` dengan tag model yang mendukung tool calling dari `ollama list`. Untuk provider eksternal, isi endpoint HTTPS Chat Completions, nama model, dan kunci provider di AI Service. Jika `AI_COMPANION_ENABLED=true`, model yang dipilih menerima isi pesan dan konteks percakapan sesi.
+
+Jalankan API di terminal kedua dengan Go 1.25 atau lebih baru. Go membaca environment proses. Untuk chat personal, siapkan database dan autentikasi sesuai panduan SMTP lokal di atas. Jika pengaturan sudah ada di `backend/.env`, blok PowerShell berikut memuat nilai sederhana `NAMA=nilai` dari file tersebut ke terminal ini.
 
 ```powershell
 Set-Location backend
+if (Test-Path .env) {
+  Get-Content .env | ForEach-Object {
+    if ($_ -match '^\s*([A-Z][A-Z0-9_]*)=(.*)$') {
+      [Environment]::SetEnvironmentVariable($Matches[1], $Matches[2].Trim(), 'Process')
+    }
+  }
+}
 $env:RANTAU_DEMO = 'true'
 $env:AI_SERVICE_URL = 'http://127.0.0.1:8081'
 go run ./cmd/api
@@ -63,13 +74,30 @@ Invoke-RestMethod -Method Post `
 
 AI Service mencari cuplikan dokumen berdasarkan kata dalam pertanyaan. Respons memuat sumber yang diambil. Nilai `mode` adalah `retrieval` ketika jawaban menampilkan cuplikan, `rag` ketika model menghasilkan jawaban dengan konteks dokumen, atau `no_context` jika topik belum ditemukan.
 
-Untuk generasi dengan model, atur `AI_LLM_URL`, `AI_LLM_MODEL`, dan `AI_LLM_API_KEY` di lingkungan AI Service sebelum memulainya. Adapter menerima endpoint HTTPS yang menggunakan kontrak Chat Completions. Panduan kontrak tersedia di [dokumentasi API](https://developers.openai.com/api/reference/resources/chat). Demo lokal memakai panduan Rantau+ dan pertanyaan contoh. Koneksi database, kredensial pengguna, dan transaksi pribadi berada di jalur terpisah dari korpus dan jalur demo AI.
+Untuk menguji percakapan tanpa Flutter, login dengan akun uji terverifikasi di terminal lain, lalu panggil endpoint chat.
 
-## Tambah skill atau hubungkan data personal
+```powershell
+$akun = Get-Credential -Message 'Masukkan email dan password akun uji'
+$login = Invoke-RestMethod -Method Post -Uri 'http://127.0.0.1:8080/api/v1/auth/login' `
+  -ContentType 'application/json' -Body (@{email=$akun.UserName; password=$akun.GetNetworkCredential().Password} | ConvertTo-Json)
+$headers = @{ Authorization = "Bearer $($login.data.access_token)" }
+$chat = 'http://127.0.0.1:8080/api/v1/assistant/chat'
+Invoke-RestMethod -Method Post -Uri $chat -Headers $headers -ContentType 'application/json' `
+  -Body '{"message":"Aku mau beli kado 50k. Kalau makan 25k juga masih cukup?"}' |
+  ConvertTo-Json -Depth 8
+```
 
-1. Siapkan korpus milik skill di `ai-service/knowledge/` dengan ID sumber yang stabil. Daftarkan skill di `ai-service/src/server.js` dan gunakan kembali retriever serta resolver jawaban. Jika volume dokumen meningkat, retriever dapat diganti dengan pencarian embedding tanpa mengubah kontrak HTTP Go.
-2. Untuk pertanyaan personal seperti “Berapa Safe-to-Spend saya?”, buat use case Go yang memvalidasi sesi dan mengambil hasil financial engine. AI Service dapat memakai hasil terstruktur tersebut sebagai konteks jawaban setelah jalur privat tersedia. Endpoint demo saat ini menjelaskan konsep dan terpisah dari `GET /api/v1/demo/finance/summary`.
-3. Flutter menggunakan Go untuk memanggil AI Companion ketika layar chat ditambahkan. AI Service berjalan di loopback dan memiliki endpoint internal `POST /internal/v1/chat`.
+Go menyimpan hingga empat pasangan pesan dan jawaban dalam memori per sesi login. Riwayat kedaluwarsa setelah 30 menit tanpa percakapan berhasil, dan hilang saat proses Go dimulai ulang. Untuk pertanyaan finansial, Go membaca akun dari sesi dan mengembalikan hasil Financial Engine dalam `data.financial` atau `data.simulation`. Pertanyaan curhat atau ide kado dapat menghasilkan `mode: conversation` dengan teks di `data.answer`.
+
+Untuk pencarian tempat makan, aktifkan Places API (New) di proyek Google dan isi `GOOGLE_PLACES_API_KEY` pada environment backend. Kirim contoh `{"message":"Cari tempat makan dekat Kampus B UNAIR"}`, atau sertakan `"location":{"latitude":-7.27,"longitude":112.76}` setelah pengguna membagikan lokasi. Go memakai Text Search untuk area dan Nearby Search untuk koordinat. Respons `data.places` memuat kartu hasil dengan tautan Maps, kisaran harga dan status buka jika tersedia. Tampilkan atribusi Google Maps dan atribusi tambahan dari hasil pencarian. Saat lokasi belum tersedia respons dapat berisi `needs_location`, dan jika layanan Places belum aktif respons berisi `places_unavailable`.
+
+## AI Companion di Flutter
+
+Ketuk ikon maskot di dashboard untuk membuka chat. Masuk dengan akun Rantau+ dan simpan Financial Setup untuk mencoba pertanyaan personal seperti “Berapa Safe-to-Spend saya?” dan “Kalau beli barang Rp300 ribu, uangku masih cukup?”
+
+Flutter mengirim pesan ke `POST /api/v1/assistant/chat` memakai bearer token. Go mengambil ringkasan periode aktif milik akun tersebut dan menghitung simulasi satu kali belanja. Hasilnya memuat dana tersedia, batas harian, proyeksi saldo, dan saran tindakan. Simulasi tidak mencatat pengeluaran.
+
+AI Service memilih fungsi yang diperlukan. Go memvalidasi argumen dan menyediakan hasil untuk ringkasan, simulasi, pencarian tempat makan, atau panduan bersumber. Pertanyaan anggaran dasar tetap tersedia melalui aturan lokal saat model offline. Gunakan database dan migrasi yang sama dengan Financial Setup.
 
 ## Dashboard Flutter
 
@@ -124,3 +152,11 @@ Perintah migrasi bisa dijalankan ulang dan membaca riwayat `schema_migrations` y
 ## Pemeriksaan
 
 Jalankan `npm test` dari `ai-service/`, serta `go test ./...` dan `go vet ./...` dari `backend/`.
+
+Untuk uji chat langsung dengan model lokal, jalankan AI Service dan gunakan database uji yang sudah dimigrasi. Tes berikut membuat akun dan periode sintetis dalam transaksi yang di-rollback.
+
+```powershell
+$env:COMPANION_TEST_DATABASE_URL = $env:DATABASE_URL
+$env:COMPANION_TEST_AI_URL = 'http://127.0.0.1:8081'
+go test ./internal/httpserver -run '^TestLiveCompanionPurchase$' -v -count=1
+```
